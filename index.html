@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prediktor Musuh Magic Chess (MCGG)</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #121214;
+            color: #e1e1e6;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .container {
+            max-width: 800px;
+            width: 100%;
+            background: #202024;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+        }
+        h1, h2 {
+            text-align: center;
+            color: #00adb5;
+        }
+        .setup-section, .game-section {
+            margin-bottom: 20px;
+        }
+        .grid-players {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        input[type="text"] {
+            padding: 10px;
+            border: 1px solid #323238;
+            border-radius: 4px;
+            background: #121214;
+            color: #fff;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            background: #00adb5;
+            border: none;
+            color: white;
+            font-weight: bold;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: 0.2s;
+        }
+        button:hover {
+            background: #008c95;
+        }
+        .hidden {
+            display: none;
+        }
+        .round-controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #323238;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+        .player-card {
+            background: #29292e;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            border-left: 5px solid #00adb5;
+        }
+        .eliminated {
+            border-left-color: #ff5555;
+            opacity: 0.6;
+        }
+        .prediction-list {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #a8a8b3;
+        }
+        .badge {
+            background: #41414c;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 12px;
+            margin-left: 5px;
+        }
+        .select-enemy {
+            margin-top: 8px;
+            padding: 5px;
+            background: #121214;
+            color: #fff;
+            border: 1px solid #323238;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>MCGG Enemy Predictor</h1>
+    
+    <!-- Bagian Input Nama Player -->
+    <div id="setup-section" class="setup-section">
+        <h2>Masukkan Nama 8 Player</h2>
+        <div class="grid-players">
+            <input type="text" id="p1" value="Anda (MC)" placeholder="Player 1">
+            <input type="text" id="p2" value="Player 2" placeholder="Player 2">
+            <input type="text" id="p3" value="Player 3" placeholder="Player 3">
+            <input type="text" id="p4" value="Player 4" placeholder="Player 4">
+            <input type="text" id="p5" value="Player 5" placeholder="Player 5">
+            <input type="text" id="p6" value="Player 6" placeholder="Player 6">
+            <input type="text" id="p7" value="Player 7" placeholder="Player 7">
+            <input type="text" id="p8" value="Player 8" placeholder="Player 8">
+        </div>
+        <button onclick="startGame()">Mulai Pertandingan</button>
+    </div>
+
+    <!-- Bagian Pelacakan Ronde Game -->
+    <div id="game-section" class="game-section hidden">
+        <div class="round-controls">
+            <h3>Ronde: <span id="round-number">1</span></h3>
+            <button style="width: auto; padding: 8px 15px;" onclick="nextRound()">Lanjut Ronde Berikutnya →</button>
+        </div>
+
+        <h2>Daftar Player & Prediksi Lawan Anda</h2>
+        <div id="players-list"></div>
+    </div>
+</div>
+
+<script>
+    let players = [];
+    let currentRound = 1;
+
+    function startGame() {
+        players = [];
+        for (let i = 1; i <= 8; i++) {
+            let name = document.getElementById(`p${i}`).value.trim();
+            if (!name) name = `Player ${i}`;
+            players.push({
+                id: i,
+                name: name,
+                isAlive: true,
+                history: [] // Mencatat id lawan yang sudah dihadapi
+            });
+        }
+        
+        document.getElementById('setup-section').classList.add('hidden');
+        document.getElementById('game-section').classList.remove('hidden');
+        renderPlayers();
+    }
+
+    function renderPlayers() {
+        const listContainer = document.getElementById('players-list');
+        listContainer.innerHTML = '';
+
+        // Player utama / Anda diasumsikan adalah ID 1
+        const mainPlayer = players.find(p => p.id === 1);
+
+        players.forEach(player => {
+            const card = document.createElement('div');
+            card.className = `player-card ${!player.isAlive ? 'eliminated' : ''}`;
+            
+            // Membuat opsi dropdown musuh yang dihadapi ronde ini
+            let enemyOptions = `<option value="">-- Pilih lawan ronde ini --</option>`;
+            players.forEach(other => {
+                if (other.id !== player.id && other.isAlive) {
+                    const selected = player.history[currentRound - 1] === other.id ? 'selected' : '';
+                    enemyOptions += `<option value="${other.id}" ${selected}>${other.name}</option>`;
+                }
+            });
+
+            // Logika Prediksi Sederhana untuk Anda (ID 1)
+            let predictionText = '';
+            if (player.id === 1 && player.isAlive) {
+                // Cari musuh hidup yang belum pernah dilawan dalam 3 ronde terakhir
+                let candidates = players.filter(p => p.id !== 1 && p.isAlive);
+                let recentOpponents = player.history.slice(-3); // Aturan sistem MCGG: jarang ketemu musuh yang sama berturut-turut
+                
+                let predictedEnemies = candidates.filter(p => !recentOpponents.includes(p.id));
+                
+                if (predictedEnemies.length > 0) {
+                    predictionText = `<div class="prediction-list">💡 <b>Kemungkinan musuh berikutnya:</b> ${predictedEnemies.map(p => p.name).join(', ')}</div>`;
+                } else {
+                    predictionText = `<div class="prediction-list">💡 <b>Kemungkinan musuh berikutnya:</b> Semua player hidup acak.</div>`;
+                }
+            }
+
+            card.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <strong>${player.name}</strong> ${player.id === 1 ? '<span class="badge">Anda</span>' : ''}
+                        ${!player.isAlive ? '<span class="badge" style="background:#ff5555">Eliminasi</span>' : ''}
+                    </div>
+                    <div>
+                        <label><input type="checkbox" ${!player.isAlive ? 'checked' : ''} onchange="toggleEliminate(${player.id})"> Eliminasi</label>
+                    </div>
+                </div>
+                ${player.isAlive ? `
+                    <div style="margin-top: 10px;">
+                        <label style="font-size: 13px;">Lawan ronde ini: </label>
+                        <select class="select-enemy" onchange="recordMatch(\${player.id}, this.value)">
+                            \${enemyOptions}
+                        </select>
+                    </div>
+                ` : ''}
+                ${predictionText}
+            `;
+            listContainer.appendChild(card);
+        });
+    }
+
+    function recordMatch(playerId, enemyId) {
+        const player = players.find(p => p.id === playerId);
+        if (player) {
+            player.history[currentRound - 1] = enemyId ? parseInt(enemyId) : null;
+        }
+    }
+
+    function toggleEliminate(id) {
+        const player = players.find(p => p.id === id);
+        if (player) {
+            player.isAlive = !player.isAlive;
+            renderPlayers();
+        }
+    }
+
+    function nextRound() {
+        currentRound++;
+        document.getElementById('round-number').innerText = currentRound;
+        renderPlayers();
+    }
+</script>
+
+</body>
+</html>
